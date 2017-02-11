@@ -12,6 +12,7 @@ data World = World {
     shoot :: Bool,
     turning :: Float,
     force :: Vector,
+    pushing :: Float,
     player :: Player
 }
 
@@ -41,6 +42,7 @@ initWorld = World {
     turning = 0.0,
     force = (0.0, 0.0),
     shoot = False,
+    pushing = 0.0,
     player = initPlayer
 }
 
@@ -80,16 +82,22 @@ render game =
 
 degToVec = unitVectorAtAngle . degToRad . argV
 
-handleInputs (EventKey (SpecialKey KeySpace) _ _ _) World{..} = World { turning = turning, force = force, shoot = True, player = player }
-
-handleInputs (EventKey (SpecialKey KeyRight) Down _ _) World{..} = World { turning = -1.0, force = force, shoot = shoot, player = player }
-handleInputs (EventKey (SpecialKey KeyRight) Up _ _) World{..} = World { turning = 0.0, force = force, shoot = shoot, player = player }
-
-handleInputs (EventKey (SpecialKey KeyLeft) Down _ _) World{..} = World { turning = 1.0, force = force, shoot = shoot, player = player }
-handleInputs (EventKey (SpecialKey KeyLeft) Up _ _) World{..} = World { turning = 0.0, force = force, shoot = shoot, player = player }
-
-handleInputs (EventKey (SpecialKey KeyUp) Down _ _) World{..} = World { turning = turning, force = facing player, shoot = shoot, player = player }
-handleInputs (EventKey (SpecialKey KeyUp) Up _ _) World{..} = World { turning = turning, force = (0.0, 0.0), shoot = shoot, player = player }
+handleInputs (EventKey key state _ _) World{..} = World {
+        turning = trn key state,
+        force = facing player,
+        shoot = sht key,
+        player = player,
+        pushing = psh key state pushing
+    }
+    where
+        trn (SpecialKey KeyRight) Down = -1.0
+        trn (SpecialKey KeyLeft) Down = 1.0
+        trn _ _ = 0.0
+        psh (SpecialKey KeyUp) Down _ = 1.0
+        psh (SpecialKey KeyUp) Up _ = 0.0
+        psh _ _ push = push
+        sht (SpecialKey KeySpace) = True
+        sht _ = False
 handleInputs _ world = world
 
 update :: Float -> World -> World
@@ -98,17 +106,22 @@ update dt World{..} =
         turning = turning,
         force = force,
         shoot = False,
-        player = updatePlayer player turning force
+        pushing = pushing,
+        player = updatePlayer player turning force pushing
     }
     where
-        updatePlayer Player{..} trn frc = Player {
+        updatePlayer Player{..} trn frc psh = Player {
                 x = clmp ( x + (fst heading) * dt ) ( fromIntegral sWd ),
                 y = clmp ( y + (snd heading) * dt ) ( fromIntegral sHt ),
                 facing = rotateV ( trn * dt * 5 ) facing,
                 power = power,
-                heading = heading + mulSV power frc,
+                heading = heading_ psh heading power frc,
                 picture = picture
             }
+            where
+                heading_ p h pow frc
+                    | p == 1.0 = mulSV p (h + mulSV pow frc)
+                    | otherwise = h
 
 clmp x scrn
     | abs x > scrn / 2 = negate x
