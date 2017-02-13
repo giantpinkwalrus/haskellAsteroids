@@ -80,14 +80,15 @@ playerPicture = Color white $ pictures [ circle 0.5
         bottomSect = line [((-0.25), (-0.75)), ((-0.25), 0.75)]
 
 render game =
-    Pictures [renderPlayer (player game)
+    Pictures $ [renderPlayer (player game)
             , dgHead (player game)
             , dgFace (player game)
             , debugText (player game)
             , debugText2 game
-    ]
+    ] ++ map displayBullet (bullets game)
     where
         renderPlayer Player{..} = translate x y $ rotate ( radToDeg $ argV facing * (-1) ) picture
+        displayBullet Bullet{..} = translate (fst pos) (snd pos) $ bulletPicture
         dgHead Player{..} = translate x y $ color (makeColor 1 0 1 1) $ line [(0, 0), heading]
         dgFace Player{..} = translate x y $ color (makeColor 0 1 0 1) $ line [facing, mulSV 10 facing]
         debugText Player{..} = translate (-100) (-50) $ color (makeColor 1 1 1 1) $ Scale 0.1 0.1 $ Text (show x ++ " " ++ show y)
@@ -119,8 +120,8 @@ handleInputs _ world = world
 update :: Float -> World -> World
 update dt World{..} =
     World {
-        bullets = map (\Bullet{..} -> Bullet {
-                pos = pos + dir,
+        bullets = makeBullet (shoot) (player) $ filter (\Bullet{..} -> life > 0 ) $ map (\Bullet{..} -> Bullet {
+                pos = clmpV $ pos + mulSV (bulletSpeed * dt) dir,
                 dir = dir,
                 life = life - dt
             }) bullets,
@@ -131,6 +132,8 @@ update dt World{..} =
         player = updatePlayer player turning force pushing
     }
     where
+        makeBullet True Player{..} xs = (Bullet { pos = (x, y), dir = facing, life = bulletLife }) : xs
+        makeBullet False _ xs = xs
         updatePlayer Player{..} trn frc psh = Player {
                 x = clmp ( x + (fst heading) * dt ) ( fromIntegral sWd ),
                 y = clmp ( y + (snd heading) * dt ) ( fromIntegral sHt ),
@@ -149,7 +152,15 @@ roundVector vec
     | magV vec < 1 = (0, 0)
     | otherwise = vec
 
+clmpV vec = (clmp (fst vec) (fromIntegral sWd), clmp (snd vec) (fromIntegral sHt))
+
+clmp :: Float -> Float -> Float
 clmp x scrn
     | abs x > scrn / 2 = negate x
     | otherwise = x
 
+bulletSpeed :: Float
+bulletSpeed = 500.0
+
+bulletLife :: Float
+bulletLife = 0.5
