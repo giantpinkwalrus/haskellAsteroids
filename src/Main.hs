@@ -9,6 +9,7 @@ import Graphics.Gloss.Data.ViewPort
 
 
 data World = World {
+    bullets :: [Bullet],
     shoot :: Bool,
     turning :: Float,
     force :: Vector,
@@ -22,7 +23,14 @@ data Player = Player {
     facing :: Vector,
     heading :: Vector,
     picture :: Picture,
-    power :: Float
+    power :: Float,
+    friction :: Float
+}
+
+data Bullet = Bullet {
+    pos :: Vector,
+    dir :: Vector,
+    life :: Float
 }
 
 main :: IO ()
@@ -39,6 +47,7 @@ sHt :: Int
 sHt = 480
 
 initWorld = World {
+    bullets = [],
     turning = 0.0,
     force = (0.0, 0.0),
     shoot = False,
@@ -53,8 +62,12 @@ initPlayer = Player {
     facing = (0.0, 1.0),
     power = 5.0,
     heading = (0.0, 0.0),
-    picture = (Scale 10.0 10.0 (playerPicture))
+    picture = (Scale 10.0 10.0 (playerPicture)),
+    friction = 0.5
 }
+
+bulletPicture :: Picture
+bulletPicture = Color white $ circleSolid 1
 
 playerPicture :: Picture
 playerPicture = Color white $ pictures [ circle 0.5
@@ -83,26 +96,34 @@ render game =
 degToVec = unitVectorAtAngle . degToRad . argV
 
 handleInputs (EventKey key state _ _) World{..} = World {
-        turning = trn key state,
+        bullets = bullets,
+        turning = trn key state turning,
         force = facing player,
-        shoot = sht key,
+        shoot = sht key state,
         player = player,
         pushing = psh key state pushing
     }
     where
-        trn (SpecialKey KeyRight) Down = -1.0
-        trn (SpecialKey KeyLeft) Down = 1.0
-        trn _ _ = 0.0
+        trn (SpecialKey KeyRight) Down _ = -1.0
+        trn (SpecialKey KeyRight) Up _ = 0
+        trn (SpecialKey KeyLeft) Down _ = 1.0
+        trn (SpecialKey KeyLeft) Up _ = 0
+        trn _ _ turning = turning
         psh (SpecialKey KeyUp) Down _ = 1.0
         psh (SpecialKey KeyUp) Up _ = 0.0
         psh _ _ push = push
-        sht (SpecialKey KeySpace) = True
-        sht _ = False
+        sht (SpecialKey KeySpace) Down = True
+        sht _ _ = False
 handleInputs _ world = world
 
 update :: Float -> World -> World
 update dt World{..} =
     World {
+        bullets = map (\Bullet{..} -> Bullet {
+                pos = pos + dir,
+                dir = dir,
+                life = life - dt
+            }) bullets,
         turning = turning,
         force = force,
         shoot = False,
@@ -115,13 +136,18 @@ update dt World{..} =
                 y = clmp ( y + (snd heading) * dt ) ( fromIntegral sHt ),
                 facing = rotateV ( trn * dt * 5 ) facing,
                 power = power,
-                heading = heading_ psh heading power frc,
-                picture = picture
+                heading = heading_ psh heading power frc friction,
+                picture = picture,
+                friction = friction
             }
             where
-                heading_ p h pow frc
+                heading_ p h pow frc fric
                     | p == 1.0 = mulSV p (h + mulSV pow frc)
-                    | otherwise = h
+                    | otherwise = roundVector $ mulSV (1 - dt * fric) h
+
+roundVector vec
+    | magV vec < 1 = (0, 0)
+    | otherwise = vec
 
 clmp x scrn
     | abs x > scrn / 2 = negate x
